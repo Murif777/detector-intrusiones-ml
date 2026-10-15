@@ -27,27 +27,27 @@ Todo pasa dentro de tu computador. **No vas a atacar nada real.**
 
 Docker es el programa que corre el proyecto sin que tengas que instalar nada más.
 
-1. Entra a: **https://www.docker.com/products/docker-desktop/**
-2. Haz clic en **Download for Windows**
-3. Abre el archivo que se descargó (`Docker Desktop Installer.exe`)
-4. Dale **Next** a todo. Deja las opciones como vienen.
-5. **Cuando termine, REINICIA TU COMPUTADOR.** Esto es obligatorio.
+1. Entrá a: **https://www.docker.com/products/docker-desktop/**
+2. Hacé clic en **Download for Windows**
+3. Abrí el archivo que se descargó (`Docker Desktop Installer.exe`)
+4. Dale **Next** a todo. Dejá las opciones como vienen.
+5. **Cuando termine, REINICIÁ TU COMPUTADOR.** Esto es obligatorio.
 
-**Si eres estudiante y no te deja instalar:** necesitas permisos de
-administrador. Pídeselos a quien administra tu PC o usa tu computador personal.
+> Si no te deja instalar, necesitás permisos de administrador. Pedíselos a quien
+> administra tu PC, o usá tu computador personal.
 
 ### 1.2 Verificar que Docker quedó bien
 
 Después del reinicio:
 
-1. Abre **Docker Desktop** desde el menú Inicio
-2. Espera a que aparezca un **ícono de ballena** 🐳 en la esquina inferior derecha
+1. Abrí **Docker Desktop** desde el menú Inicio
+2. Esperá a que aparezca un **ícono de ballena** en la esquina inferior derecha
 3. **La ballena tiene que estar quieta y de color normal**, no girando ni en rojo
 
-> ⚠️ **Docker Desktop tiene que estar ABIERTO todo el tiempo.** Si lo cierras,
-> el proyecto deja de funcionar. Si no lo ves, ábrelo desde el menú Inicio.
+> ⚠️ **Docker Desktop tiene que estar ABIERTO todo el tiempo.** Si lo cerrás,
+> el proyecto deja de funcionar. Si no lo ves, abrilo desde el menú Inicio.
 
-**✅ Si ves la ballena abajo a la derecha, ya está. Sigue al paso 2.**
+**✅ Si ves la ballena abajo a la derecha, seguí a la PARTE 2.**
 
 ---
 
@@ -55,17 +55,17 @@ Después del reinicio:
 
 ### Opción fácil (sin instalar nada)
 
-1. Entra a: **https://github.com/Murif777/detector-intrusiones-ml**
-2. Haz clic en el botón verde **`< > Code`**
-3. Haz clic en **Download ZIP**
-4. Busca el archivo en tu carpeta de **Descargas**
+1. Entrá a: **https://github.com/Murif777/detector-intrusiones-ml**
+2. Hacé clic en el botón verde **`< > Code`**
+3. Hacé clic en **Download ZIP**
+4. Buscá el archivo en tu carpeta de **Descargas**
 5. Clic derecho → **Extraer todo...** → elegí una carpeta fácil de encontrar,
    por ejemplo `C:\nids`
 6. Anotá esa ruta, la vas a necesitar
 
 ### Opción si ya tenés Git instalado
 
-Abre PowerShell y escribí esto:
+Abrí PowerShell y escribí esto:
 
 ```powershell
 git clone https://github.com/Murif777/detector-intrusiones-ml.git
@@ -74,7 +74,7 @@ git clone https://github.com/Murif777/detector-intrusiones-ml.git
 Se va a crear una carpeta llamada `detector-intrusiones-ml` en tu carpeta de
 usuario.
 
-**✅ Si tenés la carpeta con `docker-compose.yml` dentro, seguí al paso 3.**
+**✅ Si tenés la carpeta con `docker-compose.yml` adentro, seguí a la PARTE 3.**
 
 ---
 
@@ -82,17 +82,17 @@ usuario.
 
 Esto es lo que más confunde, así que va despacio.
 
-1. Abre la carpeta del proyecto en el **Explorador de archivos**
+1. Abrí la carpeta del proyecto en el **Explorador de archivos**
    (por ejemplo `C:\nids\detector-intrusiones-ml`)
-2. Verificá que **dentro** de esa carpeta se vea un archivo llamado
+2. Verificá que **adentro** de esa carpeta se vea un archivo llamado
    `docker-compose.yml`
 3. En la **barra de direcciones** del Explorador (arriba), borrá lo que hay y
    escribí la palabra: `powershell`
 4. Presioná **Enter**
 
-> 💡 **Truco:** también podés hacer clic derecho en un espacio vacío de la
-> carpeta → **"Abrir en Terminal"** (Windows 11) o **"Abrir ventana de
-> PowerShell aquí"** (Windows 10).
+> **Truco:** también podés hacer clic derecho en un espacio vacío de la carpeta
+> → **"Abrir en Terminal"** (Windows 11) o **"Abrir ventana de PowerShell aquí"**
+> (Windows 10).
 
 Se abre una ventana azul o negra. Ahí vas a escribir los comandos.
 
@@ -104,8 +104,8 @@ dir
 
 Tenés que ver en la lista el archivo `docker-compose.yml`.
 
-- **Lo ves** → seguí al paso 4
-- **No lo ves** → estás en la carpeta equivocada. Volvé al paso 3.
+- **Lo ves** → seguí a la PARTE 4
+- **No lo ves** → estás en la carpeta equivocada. Volvé al inicio de esta parte.
 
 ---
 
@@ -157,11 +157,11 @@ Al final:
 nids-attacker  | Ataques completados. Revisa la salida del NIDS.
 ```
 
-**Dejá la ventana abierta y andá al paso 5.**
+**Dejá la ventana abierta y andá a la PARTE 5.**
 
 ---
 
-## PARTE 6 — Ver el panel de alertas en el navegador
+## PARTE 5 — Ver el panel de alertas en el navegador
 
 Además de las líneas de texto, hay una **página web** que muestra las alertas
 en una tabla.
@@ -170,9 +170,10 @@ en una tabla.
 
 ### Cómo verla
 
-1. **Dejá la terminal del paso 4 corriendo** (no la cierres)
+1. **Dejá la terminal de la PARTE 4 corriendo** (no la cierres). El NIDS tiene
+   que seguir capturando.
 
-2. Abrí **otra** terminal en la misma carpeta (repetí el paso 3)
+2. Abrí **otra** terminal en la misma carpeta (repetí la PARTE 3)
 
 3. Escribí esto y presioná Enter:
 
@@ -202,12 +203,13 @@ En la terminal del dashboard: **`Ctrl` + `C`**
 
 ---
 
-## PARTE 7 — Apagar todo
+## PARTE 6 — Apagar todo
 
 Cuando termines, **en cada terminal abierta**:
 
-1. Apretá **`Ctrl` + `C`**
-2. Después escribí una vez, en cualquiera de ellas:
+1. Apretá **`Ctrl` + `C`** (las dos teclas juntas)
+2. Esperá unos segundos
+3. Después escribí una vez, en cualquiera de ellas:
 
 ```powershell
 docker compose down
@@ -237,7 +239,7 @@ en otra terminal, y abrís http://localhost:8501
 
 | Lo que ves | Qué significa | Qué hacer |
 |---|---|---|
-| `docker: command not found` | Docker no está instalado | Volvé al paso 1.1 |
+| `docker: command not found` | Docker no está instalado | Volvé a la PARTE 1.1 |
 | `Cannot connect to the Docker daemon` | Docker Desktop está cerrado | Abrí Docker Desktop y esperá la ballena |
 | Se queda pegado en `Pulling` | Está descargando (500 MB) | Esperá. Puede tardar 15 min |
 | `port is already allocated` | Otro programa usa el puerto | `docker compose down` y reintentá |
@@ -289,41 +291,18 @@ sistemas. El contenedor "atacante" la usa porque trae las herramientas de ataque
 ```
 Tu computador
 └── Red interna de Docker (aislada, no toca internet)
-    ├── victim    → un servidor web de prueba
-    ├── nids      → el detector: lee el tráfico y lo clasifica
-    └── attacker  → lanza los 3 ataques
+    ├── victim     → un servidor web de prueba
+    ├── nids       → el detector: lee el tráfico y lo clasifica
+    ├── attacker   → lanza los 3 ataques
+    └── dashboard  → la página web de alertas
 ```
 
 El detector **no adivina**: cada flujo de tráfico se convierte en 24 números
 (duración, bytes, cantidad de paquetes, tasa de error...) y un modelo de
 Machine Learning entrenado con 125 973 ejemplos decide si es normal o ataque.
 
-**Resultado del modelo:** detecta el 95.6% de los ataques con 92.5% de acierto
+**Resultado del modelo:** detecta el 95.6% de los ataques, con 92.5% de acierto
 en sus alertas, y tarda 0.34 milisegundos por flujo.
-
----
-
-## Resumen ultra corto
-
-Si ya tenés Docker y el proyecto descargado:
-
-```powershell
-docker compose up              # arranca y muestra las alertas en texto
-```
-
-En otra terminal:
-
-```powershell
-docker compose up dashboard    # panel web en http://localhost:8501
-```
-
-Para apagar todo:
-
-```powershell
-docker compose down
-```
-
-Eso es todo.
 
 ---
 
@@ -337,3 +316,13 @@ Eso es todo.
 | Apagar todo | `Ctrl` + `C` y después `docker compose down` |
 | Ver qué está corriendo | `docker compose ps` |
 | Ver solo los logs del NIDS | `docker compose logs -f nids` |
+
+### Resumen ultra corto
+
+```powershell
+docker compose up              # arranca y muestra las alertas en texto
+docker compose up dashboard    # (otra terminal) panel web en localhost:8501
+docker compose down            # apaga todo
+```
+
+Eso es todo.
