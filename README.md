@@ -239,6 +239,17 @@ No son falta de tiempo: son límites reales del alcance. Citables en el informe.
 
 ---
 
+## Documentación
+
+| Archivo | Para quién | Contenido |
+|---|---|---|
+| **[SUSTENTACION.md](SUSTENTACION.md)** | defensa técnica | El dataset, la limpieza, la arquitectura en Python, cómo funciona el modelo, el entrenamiento, la evaluación y las limitaciones. Todas las cifras son de la ejecución real. |
+| **[COMO_PROBAR.md](COMO_PROBAR.md)** | compañeros | Guía paso a paso desde cero, sin asumir conocimientos técnicos. |
+| **[GUION_DEMO.md](GUION_DEMO.md)** | presentación | Qué decir y qué mostrar, paso a paso, con respaldo si algo falla. |
+| **[docker/README.md](docker/README.md)** | defensa técnica | Arquitectura de la demo en vivo y por qué funciona. |
+
+---
+
 ## Estructura
 
 ```
