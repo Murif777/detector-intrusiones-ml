@@ -1,20 +1,27 @@
 # Imagen del atacante: genera trafico real contra la victima.
 #
+# Base Kali y no Alpine: `hping3` y `nmap` no estan empaquetados en Alpine 3.20
+# (apk falla con "unable to select packages"). Kali es la distribucion de
+# seguridad ofensiva de referencia: trae ambas herramientas y es lo que se
+# espera ver como atacante en un proyecto de deteccion de intrusiones.
+#
 # Comparte el espacio de red del contenedor NIDS (`network_mode: service:nids`
 # en el compose), asi que sus paquetes salen por la MISMA interfaz que el NIDS
 # captura. Eso garantiza que la captura vea el ataque, sin depender de que un
 # bridge de Docker reenvie trafico de terceros (que no lo hace).
-FROM alpine:3.20
+FROM kalilinux/kali-rolling
 
-# hping3: SYN flood. nmap: escaneo de puertos y sondeo. curl: flood HTTP.
-# bash: el script de ataque usa bash, no ash.
-RUN apk add --no-cache \
-        bash \
+# Solo las tres herramientas que usa attack.sh. La meta-distribucion completa
+# `kali-linux-headless` pesa mas de 1 GB y no hace falta para nada de esto.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         hping3 \
         nmap \
         curl \
         iproute2 \
-        iputils
+        iputils-ping \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY docker/attack.sh /attack.sh
 RUN chmod +x /attack.sh
