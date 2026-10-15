@@ -30,7 +30,7 @@ services:
   nids:
     # La imagen publicada trae el modelo adentro. `build` queda como respaldo:
     # si no existe local, Docker la construye desde el codigo.
-    image: ghcr.io/murif777/nids-ml:latest
+    image: ghcr.io/murif777/detector-intrusiones-ml:latest
     build:
       context: .
       dockerfile: docker/Dockerfile.nids
@@ -50,7 +50,7 @@ services:
       python scripts/live_nids.py --iface eth0 --duration 90
 
   attacker:
-    image: ghcr.io/murif777/nids-ml-attacker:latest
+    image: ghcr.io/murif777/detector-intrusiones-ml-attacker:latest
     build:
       context: .
       dockerfile: docker/Dockerfile.attacker

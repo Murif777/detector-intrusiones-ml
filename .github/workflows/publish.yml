@@ -1,8 +1,8 @@
 # Entrena el modelo y publica las imagenes en GitHub Container Registry.
 #
 # Por que entrena en vez de usar un artefacto commiteado: el modelo es un
-# producto derivado. Generarlo aqui hace la publicacion reproducible — el mismo
-# commit y el mismo dataset dan el mismo artefacto (random_state fijo) — y evita
+# producto derivado. Generarlo aqui hace la publicacion reproducible â€” el mismo
+# commit y el mismo dataset dan el mismo artefacto (random_state fijo) â€” y evita
 # versionar 30 MB de binario en el repositorio.
 #
 # Cualquiera puede entonces probar el sistema sin Python, sin uv y sin bajar
@@ -10,7 +10,7 @@
 #
 #     docker compose up
 #
-# Las imagenes quedan publicas en ghcr.io/murif777/nids-ml.
+# Las imagenes quedan publicas en ghcr.io/murif777/detector-intrusiones-ml.
 name: Publicar imagenes
 
 on:
@@ -21,8 +21,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  NIDS_IMAGE: ghcr.io/${{ github.repository_owner }}/nids-ml
-  ATTACKER_IMAGE: ghcr.io/${{ github.repository_owner }}/nids-ml-attacker
+  NIDS_IMAGE: ghcr.io/${{ github.repository }}
+  ATTACKER_IMAGE: ghcr.io/${{ github.repository }}-attacker
 
 jobs:
   build-and-push:
