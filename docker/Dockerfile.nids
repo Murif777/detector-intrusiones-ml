@@ -16,6 +16,8 @@ RUN apt-get update \
 WORKDIR /app
 
 # Dependencias primero: si no cambian, Docker reutiliza la capa cacheada.
+# streamlit va incluido para que el dashboard corra tambien como contenedor
+# (servicio `dashboard` del compose): asi nadie necesita Python en su PC.
 RUN pip install --no-cache-dir \
         "scikit-learn>=1.5" \
         "polars>=1.9" \
@@ -24,7 +26,8 @@ RUN pip install --no-cache-dir \
         "pydantic>=2.8" \
         "typer>=0.12" \
         "rich>=13.7" \
-        "scapy>=2.6"
+        "scapy>=2.6" \
+        "streamlit>=1.38"
 
 COPY src/ ./src/
 COPY scripts/ ./scripts/

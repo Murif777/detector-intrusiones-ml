@@ -65,6 +65,30 @@ services:
     environment:
       NIDS_WARMUP: "12"
 
+  dashboard:
+    # Panel web de alertas. Es la misma imagen del NIDS: ya trae streamlit, asi
+    # que nadie necesita instalar Python para ver la visualizacion.
+    image: ghcr.io/murif777/detector-intrusiones-ml:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nids
+    container_name: nids-dashboard
+    networks:
+      - nidsnet
+    ports:
+      - "8501:8501"
+    volumes:
+      # Lee el mismo store JSONL que escribe el NIDS.
+      - ./output:/app/output
+    command: >
+      streamlit run dashboard.py
+      --server.port 8501
+      --server.address 0.0.0.0
+      --server.headless true
+      --browser.gatherUsageStats false
+    depends_on:
+      - nids
+
 networks:
   nidsnet:
     driver: bridge
