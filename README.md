@@ -32,6 +32,41 @@ Detección por familia de ataque (stream de paquetes real):
 
 ---
 
+## Pruébalo en un minuto
+
+Solo necesitas **Docker**. Nada de Python, ni dependencias, ni descargar
+datasets, ni entrenar: la imagen publicada trae el modelo adentro.
+
+```bash
+git clone https://github.com/Murif777/detector-intrusiones-ml
+cd detector-intrusiones-ml
+docker compose up
+```
+
+Vas a ver tres contenedores arrancar, un atacante lanzando tres familias de
+ataques, y al NIDS imprimiendo alertas en vivo:
+
+```
+ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
+```
+
+### Si quieres explorar el código
+
+```bash
+uv sync --extra dev
+uv run python scripts/bootstrap.py   # baja NSL-KDD, entrena y verifica
+uv run pytest                        # 77 tests
+```
+
+### Si quieres reentrenar tras cambiar algo
+
+```bash
+uv run python scripts/bootstrap.py --force
+docker compose up --build            # reconstruye con el modelo nuevo
+```
+
+---
+
 ## El problema que casi todos fallan
 
 El dataset entrena con **features por conexión** (`count`, `serror_rate`,
