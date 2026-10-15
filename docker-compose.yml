@@ -1,0 +1,70 @@
+# Demo en vivo del NIDS: tres contenedores, un ataque real, captura real.
+#
+#     docker compose up            # usa la imagen publicada (cero setup)
+#     docker compose up --build    # reconstruye desde el codigo local
+#
+# Topologia:
+#
+#     victim    (nginx)          red nidsnet
+#     nids      (nuestro NIDS)   red nidsnet, CAP_NET_ADMIN, captura en eth0
+#     attacker  (hping3/nmap)    COMPARTE el netns del NIDS
+#
+# Por que el atacante comparte el netns del NIDS (`network_mode: service:nids`):
+# un bridge de Docker reenvia el trafico unicamente al puerto destino, asi que
+# un tercer contenedor NO veria el ataque. Al compartir el espacio de red, los
+# paquetes del atacante salen por la misma eth0 que el NIDS captura: la captura
+# es real y funciona sin depender de configuracion de bridge ni de modo
+# promiscuo.
+#
+# Requiere Docker corriendo. NO requiere permisos de admin en el host: las
+# capacidades se conceden al contenedor, no al usuario.
+
+services:
+  victim:
+    image: nginx:alpine
+    container_name: nids-victim
+    networks:
+      - nidsnet
+    # Sin puertos publicados: el trafico se queda dentro de la red del compose.
+
+  nids:
+    # La imagen publicada trae el modelo adentro. `build` queda como respaldo:
+    # si no existe local, Docker la construye desde el codigo.
+    image: ghcr.io/murif777/nids-ml:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nids
+    container_name: nids-detector
+    networks:
+      - nidsnet
+    # CAP_NET_ADMIN: abrir la interfaz en modo promiscuo y capturar.
+    # CAP_NET_RAW:   sockets crudos que scapy/libpcap necesitan.
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      # Las alertas quedan en el host para que el dashboard las lea.
+      # El modelo NO se monta: viene dentro de la imagen.
+      - ./output:/app/output
+    command: >
+      python scripts/live_nids.py --iface eth0 --duration 90
+
+  attacker:
+    image: ghcr.io/murif777/nids-ml-attacker:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.attacker
+    container_name: nids-attacker
+    # Comparte la pila de red del NIDS. Ver la nota de arriba.
+    network_mode: "service:nids"
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    depends_on:
+      - nids
+    environment:
+      NIDS_WARMUP: "12"
+
+networks:
+  nidsnet:
+    driver: bridge

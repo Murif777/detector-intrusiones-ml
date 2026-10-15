@@ -1,0 +1,121 @@
+# Entrena el modelo y publica las imagenes en GitHub Container Registry.
+#
+# Por que entrena en vez de usar un artefacto commiteado: el modelo es un
+# producto derivado. Generarlo aqui hace la publicacion reproducible — el mismo
+# commit y el mismo dataset dan el mismo artefacto (random_state fijo) — y evita
+# versionar 30 MB de binario en el repositorio.
+#
+# Cualquiera puede entonces probar el sistema sin Python, sin uv y sin bajar
+# el dataset:
+#
+#     docker compose up
+#
+# Las imagenes quedan publicas en ghcr.io/murif777/nids-ml.
+name: Publicar imagenes
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  NIDS_IMAGE: ghcr.io/${{ github.repository_owner }}/nids-ml
+  ATTACKER_IMAGE: ghcr.io/${{ github.repository_owner }}/nids-ml-attacker
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias
+        run: uv sync --extra dev
+
+      - name: Verificar calidad
+        run: |
+          uv run ruff check .
+          uv run basedpyright
+
+      - name: Descargar dataset y entrenar
+        # scripts/bootstrap.py baja NSL-KDD y deja models/pipeline.joblib,
+        # que es lo que el Dockerfile copia dentro de la imagen.
+        run: uv run python scripts/bootstrap.py
+
+      - name: Correr los tests
+        run: uv run pytest
+
+      - name: Login en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos de la imagen NIDS
+        id: meta-nids
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.NIDS_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Construir y publicar NIDS
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.nids
+          push: true
+          tags: ${{ steps.meta-nids.outputs.tags }}
+          labels: ${{ steps.meta-nids.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Metadatos de la imagen atacante
+        id: meta-attacker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ATTACKER_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Construir y publicar atacante
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.attacker
+          push: true
+          tags: ${{ steps.meta-attacker.outputs.tags }}
+          labels: ${{ steps.meta-attacker.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Resumen
+        run: |
+          {
+            echo "## Imagenes publicadas"
+            echo ""
+            echo "Cualquiera puede probar el sistema con:"
+            echo '```bash'
+            echo "docker compose up"
+            echo '```'
+            echo ""
+            echo "- NIDS: \`${{ env.NIDS_IMAGE }}:latest\`"
+            echo "- Atacante: \`${{ env.ATTACKER_IMAGE }}:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

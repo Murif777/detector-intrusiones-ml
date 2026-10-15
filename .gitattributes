@@ -1,0 +1,17 @@
+# Normaliza saltos de linea en el repo: LF, sin importar el sistema del que
+# venga el commit. Evita diffs falsos entre Windows y Linux, y que los scripts
+# .sh lleguen con CRLF (que rompe `bash attack.sh`).
+* text=auto eol=lf
+
+# Binarios: sin conversion.
+*.pdf binary
+*.joblib binary
+*.pcap binary
+*.png binary
+
+# Los scripts de shell DEBEN quedar con LF, o el contenedor los rechaza.
+*.sh text eol=lf
+
+# En Windows conviene CRLF para .ps1 y .bat.
+*.ps1 text eol=crlf
+*.bat text eol=crlf

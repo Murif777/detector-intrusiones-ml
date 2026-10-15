@@ -1,0 +1,41 @@
+# Imagen del NIDS: captura en vivo y clasifica con el modelo entrenado.
+#
+# Por que Linux y no Windows: `scapy.sniff()` necesita una pila de red real con
+# permisos de captura. En Linux basta `CAP_NET_ADMIN`; en Windows hace falta
+# Npcap y terminal de administrador. El contenedor elimina esa dependencia del
+# PC de presentacion.
+FROM python:3.12-slim
+
+# libpcap: scapy la usa para capturar de forma nativa (mas rapido que su lector
+# propio). iproute2 y tcpdump quedan para diagnostico dentro del contenedor.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpcap0.8 iproute2 tcpdump curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependencias primero: si no cambian, Docker reutiliza la capa cacheada.
+RUN pip install --no-cache-dir \
+        "scikit-learn>=1.5" \
+        "polars>=1.9" \
+        "numpy>=2.0" \
+        "joblib>=1.4" \
+        "pydantic>=2.8" \
+        "typer>=0.12" \
+        "rich>=13.7" \
+        "scapy>=2.6"
+
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY dashboard.py ./
+
+# El artefacto entrenado entra en la imagen: asi `docker compose up` funciona
+# en cualquier PC sin Python, sin uv y sin descargar el dataset. Se genera con
+# `scripts/bootstrap.py` (o lo entrena la CI) antes del build.
+COPY models/ ./models/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "scripts/live_nids.py", "--iface", "eth0", "--duration", "90"]

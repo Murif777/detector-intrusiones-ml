@@ -1,0 +1,92 @@
+[project]
+name = "nids-ml"
+version = "0.1.0"
+description = "NIDS basado en ML para monitoreo de trafico de red en tiempo real"
+requires-python = ">=3.11"
+dependencies = [
+    "scikit-learn>=1.5",
+    "polars>=1.9",
+    "numpy>=2.0",
+    "xgboost>=2.1",
+    "lightgbm>=4.5",
+    "joblib>=1.4",
+    "pydantic>=2.8",
+    "typer>=0.12",
+    "rich>=13.7",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "streamlit>=1.38",
+    "scapy>=2.6",
+    "pytest>=8.3",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["basedpyright>=1.1", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+# ── Type checker: strictest mode ──────────────────────────────
+[tool.basedpyright]
+include = ["src", "tests"]
+typeCheckingMode = "all"
+pythonVersion = "3.13"
+pythonPlatform = "Windows"
+reportMissingTypeStubs = false
+
+# sklearn no publica stubs completas: `named_steps`, `Pipeline.fit` y
+# `RandomForest.predict` vienen como Unknown. Se relajan SOLO las reglas de la
+# familia "unknown"/"unused call" para no pagar ese impuesto en cada llamada;
+# todo el resto de `all` sigue activo.
+reportAny = false
+reportExplicitAny = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnusedCallResult = false
+# typer exige `typer.Option(...)` en los defaults de los parametros CLI.
+reportCallInDefaultInitializer = false
+# Pydantic genera `__init__` en su metaclass; el type checker no lo ve y reporta
+# como "no inicializadas" ~10 variables internas de BaseModel en cada modelo.
+reportUninitializedInstanceVariable = false
+# En pytest, pedir un fixture en la firma ES activarlo: el parametro queda sin
+# usar por diseno. La regla es incompatible con el framework de tests.
+reportUnusedParameter = false
+
+# ── Linter / formatter ────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D203",    # conflicts with D211
+    "D213",    # conflicts with D212
+    "COM812",  # formatter handles trailing commas
+    "ISC001",  # formatter handles implicit concat
+    # Idiomaticos de framework que ruff no conoce:
+    "CPY001",  # sin cabecera de copyright
+    "TC001", "TC002", "TC003",  # bloques TYPE_CHECKING: overkill aqui
+    "B008",    # typer.Option en defaults ES el idioma de typer
+    "D107",    # __init__ de estimadores sklearn no lleva docstring propio
+    "N803",    # sklearn nombra el parametro `X` por contrato
+    "ARG002",  # sklearn exige el parametro `y` aunque no se use
+    "FBT001", "FBT003",  # flags booleanos de CLI en typer
+    "D401",    # docstrings imperativos en properties
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "PLR2004", "D", "ARG", "SLF001", "INP001", "TC", "PT013", "PT022"]
+"dashboard.py" = ["D", "BLE001"]  # streamlit corre como script
+"scripts/*" = ["INP001", "ANN401"]  # scapy muta paquetes in-place; Any es el tipo real
+
+# ── Tests ─────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

@@ -1,0 +1,25 @@
+# Contexto de build minimo.
+
+# Entorno y caches
+.venv/
+.git/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Datasets: 21 MB de terceros. No se hornean — el entrenamiento los usa, la
+# imagen solo necesita el artefacto ya entrenado.
+data/
+docs/
+output/
+
+# Nota: models/ SI entra en el contexto. La imagen publicada lleva el artefacto
+# adentro para que `docker compose up` funcione sin pasos previos. Se genera
+# con `scripts/bootstrap.py` antes del build.
+
+# Tests y documentacion no hacen falta dentro del contenedor.
+tests/
+*.md
+.omo/
+.codegraph/

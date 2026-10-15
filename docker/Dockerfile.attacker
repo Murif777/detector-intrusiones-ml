@@ -1,0 +1,22 @@
+# Imagen del atacante: genera trafico real contra la victima.
+#
+# Comparte el espacio de red del contenedor NIDS (`network_mode: service:nids`
+# en el compose), asi que sus paquetes salen por la MISMA interfaz que el NIDS
+# captura. Eso garantiza que la captura vea el ataque, sin depender de que un
+# bridge de Docker reenvie trafico de terceros (que no lo hace).
+FROM alpine:3.20
+
+# hping3: SYN flood. nmap: escaneo de puertos y sondeo. curl: flood HTTP.
+# bash: el script de ataque usa bash, no ash.
+RUN apk add --no-cache \
+        bash \
+        hping3 \
+        nmap \
+        curl \
+        iproute2 \
+        iputils
+
+COPY docker/attack.sh /attack.sh
+RUN chmod +x /attack.sh
+
+CMD ["/attack.sh", "victim"]
