@@ -161,48 +161,75 @@ nids-attacker  | Ataques completados. Revisa la salida del NIDS.
 
 ---
 
-## PARTE 5 — Parar el proyecto
+## PARTE 6 — Ver el panel de alertas en el navegador
 
-Cuando termines de mirar, en **la misma ventana**:
+Además de las líneas de texto, hay una **página web** que muestra las alertas
+en una tabla.
 
-1. Apretá **`Ctrl` + `C`** (las dos teclas juntas)
-2. Esperá unos segundos
+**No necesitás instalar nada.** Ya viene incluida.
+
+### Cómo verla
+
+1. **Dejá la terminal del paso 4 corriendo** (no la cierres)
+
+2. Abrí **otra** terminal en la misma carpeta (repetí el paso 3)
+
 3. Escribí esto y presioná Enter:
+
+```powershell
+docker compose up dashboard
+```
+
+4. Esperá ~30 segundos a que diga algo como `You can now view your Streamlit app`
+
+5. Abrí tu navegador (Chrome, Edge, el que uses) y entrá a:
+
+   **http://localhost:8501**
+
+### Qué vas a ver
+
+- Arriba: **Modelo entrenado: si**, y tres números (Eventos, Ataques, Normales)
+- Abajo: **la tabla de alertas**, cada fila es un flujo que el sistema detectó
+
+> 💡 **La tabla se actualiza sola cada 2 segundos.** Si lanzás un ataque con la
+> ventana abierta, vas a ver las filas aparecer en vivo, sin recargar.
+
+Si ves "Sin alertas todavía", esperá a que el atacante lance el primer ataque.
+
+### Para cerrarlo
+
+En la terminal del dashboard: **`Ctrl` + `C`**
+
+---
+
+## PARTE 7 — Apagar todo
+
+Cuando termines, **en cada terminal abierta**:
+
+1. Apretá **`Ctrl` + `C`**
+2. Después escribí una vez, en cualquiera de ellas:
 
 ```powershell
 docker compose down
 ```
 
-Esto apaga todo y limpia. **Hacelo siempre que termines.**
+Eso apaga y limpia todo. **Hacelo siempre que termines.**
 
-### Para volver a correrlo
+### Para volver a arrancarlo
 
 ```powershell
 docker compose up
 ```
 
-Ahora es instantáneo, ya está todo descargado.
+Ya es instantáneo, todo está descargado.
 
----
-
-## PARTE 6 (opcional) — Ver el panel de alertas
-
-Si querés ver las alertas en una **página web** en vez de texto:
-
-1. En otra terminal, escribí:
+Si además querés el panel:
 
 ```powershell
-docker compose up nids victim
+docker compose up dashboard
 ```
 
-2. Abrí **otra** terminal más (repetí el paso 3) y escribí:
-
-```powershell
-uv run streamlit run dashboard.py
-```
-
-> Esto necesita instalar Python y `uv`. Si no querés complicarte, **saltátelo**:
-> el paso 4 ya te muestra las alertas en texto, que es lo que importa.
+en otra terminal, y abrís http://localhost:8501
 
 ---
 
@@ -281,9 +308,32 @@ en sus alertas, y tarda 0.34 milisegundos por flujo.
 Si ya tenés Docker y el proyecto descargado:
 
 ```powershell
-docker compose up      # arranca y muestra las alertas
-Ctrl + C               # para
-docker compose down    # limpia
+docker compose up              # arranca y muestra las alertas en texto
+```
+
+En otra terminal:
+
+```powershell
+docker compose up dashboard    # panel web en http://localhost:8501
+```
+
+Para apagar todo:
+
+```powershell
+docker compose down
 ```
 
 Eso es todo.
+
+---
+
+## Chuleta para tener a mano
+
+| Quiero... | Comando |
+|---|---|
+| Arrancar el NIDS y el ataque | `docker compose up` |
+| Arrancar el panel web | `docker compose up dashboard` (otra terminal) |
+| Ver el panel | abrir http://localhost:8501 |
+| Apagar todo | `Ctrl` + `C` y después `docker compose down` |
+| Ver qué está corriendo | `docker compose ps` |
+| Ver solo los logs del NIDS | `docker compose logs -f nids` |
