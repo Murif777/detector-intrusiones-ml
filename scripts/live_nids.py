@@ -11,9 +11,12 @@ termina; este corre contra un flujo continuo y vacia las ventanas por tiempo.
 
 from __future__ import annotations
 
+import json
+import os
 import signal
 import threading
 import time
+from datetime import UTC, datetime
 from typing import Final
 
 import typer
@@ -22,7 +25,7 @@ from rich.table import Table
 from scapy.packet import Packet as ScapyPacket
 from scapy.sendrecv import sniff
 
-from src.alerts import ALERTS_PATH, append_alert, make_alert
+from src.alerts import ALERTS_PATH, RUNTIME_PATH, append_alert, make_alert
 from src.features import BURST_WINDOW_SEC, HOST_WINDOW_SEC, FlowAggregator
 from src.pipeline import load_pipeline, predict_flow
 from src.replay import packet_to_dict
@@ -48,9 +51,18 @@ def _install_signal_handlers() -> None:
 class LiveNIDS:
     """Clasificador en vivo: acumula paquetes y emite alertas por ventana."""
 
-    __slots__ = ("_bundle", "_burst", "_host", "alerts", "flows", "packets")
+    __slots__ = (
+        "_bundle",
+        "_burst",
+        "_host",
+        "_threshold",
+        "alerts",
+        "flows",
+        "normals",
+        "packets",
+    )
 
-    def __init__(self, window: float, host_window: float) -> None:
+    def __init__(self, window: float, host_window: float, threshold: float | None = None) -> None:
         bundle = load_pipeline()
         if bundle is None:
             msg = "Modelo no entrenado. Corre: uv run python -m src.train --data-dir data"
@@ -58,9 +70,11 @@ class LiveNIDS:
         self._bundle = bundle
         self._burst = FlowAggregator(window_sec=window)
         self._host = FlowAggregator(window_sec=host_window)
+        self._threshold = bundle.threshold if threshold is None else threshold
         self.packets = 0
         self.flows = 0
         self.alerts = 0
+        self.normals = 0
 
     @property
     def model_name(self) -> str:
@@ -69,7 +83,12 @@ class LiveNIDS:
 
     @property
     def threshold(self) -> float:
-        """Umbral de decision del artefacto."""
+        """Umbral efectivo de decision (artefacto o override de demo)."""
+        return self._threshold
+
+    @property
+    def artifact_threshold(self) -> float:
+        """Umbral con el que se entreno el artefacto, sin overrides."""
         return self._bundle.threshold
 
     def observe(self, raw: ScapyPacket) -> None:
@@ -94,16 +113,24 @@ class LiveNIDS:
 
     def _classify(self, flow: FlowFeatures) -> None:
         prediction = predict_flow(self._bundle, flow)
-        if not prediction.is_attack:
-            return
-        self.alerts += 1
+        # El umbral puede venir de `NIDS_THRESHOLD` (solo demo). Se reescribe la
+        # prediccion para que `make_alert` derive el label del umbral efectivo.
+        effective = prediction.score >= self._threshold
+        prediction = prediction.model_copy(update={"is_attack": effective})
+        # Se persisten TODOS los flujos: ataques y normales. El dashboard cuenta
+        # "tráfico normal" como total - ataques, y sin esto siempre daba cero.
         append_alert(make_alert(prediction, flow))
         detail = (
             f"score={prediction.score:.3f} {flow.protocol_type}/{flow.service} "
             f"flag={flow.flag} src_bytes={flow.src_bytes} "
             f"serror={flow.serror_rate:.2f}"
         )
-        console.print(f"[red]ALERTA[/red] {detail}")
+        if effective:
+            self.alerts += 1
+            console.print(f"[red]ATAQUE[/red] {detail}")
+        else:
+            self.normals += 1
+            console.print(f"[green]NORMAL[/green] {detail}")
 
 
 def _summary(nids: LiveNIDS, elapsed: float) -> None:
@@ -114,10 +141,46 @@ def _summary(nids: LiveNIDS, elapsed: float) -> None:
     table.add_row("paquetes capturados", str(nids.packets))
     table.add_row("flujos analizados", str(nids.flows))
     table.add_row("alertas emitidas", str(nids.alerts))
+    table.add_row("tráfico normal", str(nids.normals))
     rate = nids.alerts / max(nids.flows, 1)
     table.add_row("tasa de alerta", f"{rate:.2%}")
     console.print(table)
-    console.print(f"[dim]Alertas persistidas en {ALERTS_PATH}[/dim]")
+    console.print(f"[dim]Eventos persistidos en {ALERTS_PATH}[/dim]")
+
+
+def _env_threshold() -> float | None:
+    """Lee `NIDS_THRESHOLD`: override SOLO para la demo. Vacio = sin override."""
+    raw = os.environ.get("NIDS_THRESHOLD", "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        msg = f"NIDS_THRESHOLD invalido: {raw!r} (se espera un numero entre 0 y 1)"
+        raise typer.BadParameter(msg) from exc
+    if not 0.0 <= value <= 1.0:
+        msg = f"NIDS_THRESHOLD fuera de rango: {value} (se espera 0..1)"
+        raise typer.BadParameter(msg)
+    return value
+
+
+def _publish_runtime(nids: LiveNIDS) -> None:
+    """Deja el umbral efectivo en `output/` para que el dashboard lo muestre.
+
+    Es metadata de la corrida, no una alerta: el panel puede asi decir con
+    honestidad si el detector esta usando el umbral del artefacto o uno de demo.
+    """
+    payload: dict[str, bool | float | str] = {
+        "threshold": nids.threshold,
+        "artifact_threshold": nids.artifact_threshold,
+        "demo": nids.threshold != nids.artifact_threshold,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        RUNTIME_PATH.parent.mkdir(parents=True, exist_ok=True)
+        RUNTIME_PATH.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    except OSError as exc:
+        console.print(f"[yellow]Aviso: no se pudo escribir {RUNTIME_PATH}: {exc}[/yellow]")
 
 
 @app.command()
@@ -130,11 +193,15 @@ def main(
     """Captura en vivo y clasifica en tiempo real."""
     console.rule(f"[bold]NIDS-ML en vivo - iface={iface}[/bold]")
     _install_signal_handlers()
-    nids = LiveNIDS(window, host_window)
+    nids = LiveNIDS(window, host_window, threshold=_env_threshold())
+    origin = "artefacto"
+    if nids.threshold != nids.artifact_threshold:
+        origin = "demo, override NIDS_THRESHOLD"
     console.print(
         f"[green]modelo:[/green] {nids.model_name}   "
-        f"[green]umbral:[/green] {nids.threshold:.2f}"
+        f"[green]umbral:[/green] {nids.threshold:.2f} ({origin})"
     )
+    _publish_runtime(nids)
     console.print(f"Capturando en {iface}... Ctrl-C para terminar.\n")
 
     started = time.monotonic()

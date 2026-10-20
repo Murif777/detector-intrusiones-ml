@@ -48,6 +48,15 @@ services:
       - ./output:/app/output
       # Cambios en el script sin reconstruir la imagen (~6 min de build).
       - ./scripts/live_nids.py:/app/scripts/live_nids.py:ro
+      # RUNTIME_PATH (metadata del umbral) vive en src/alerts.py.
+      - ./src/alerts.py:/app/src/alerts.py:ro
+      # Descarte de ACK/FIN tardios que creaban flujos fantasma.
+      - ./src/features.py:/app/src/features.py:ro
+    environment:
+      # Override del umbral SOLO para la demo. demo-menu.ps1 lo setea en las
+      # corridas que incluyen trafico normal (0.30) y lo deja vacio en las de
+      # solo ataque. Vacio = umbral del artefacto (0.05), sin override.
+      NIDS_THRESHOLD: "${NIDS_THRESHOLD:-}"
     # NIDS_DURATION=0 deja el detector indefinido (lo usa demo-menu.ps1 para
     # encadenar varios ataques). Sin la variable, 90 s como siempre.
     command: >
@@ -92,6 +101,8 @@ services:
       - ./output:/app/output
       # Cambios en el panel sin reconstruir la imagen.
       - ./dashboard.py:/app/dashboard.py:ro
+      # RUNTIME_PATH (metadata del umbral) vive en src/alerts.py.
+      - ./src/alerts.py:/app/src/alerts.py:ro
     environment:
       # El contenedor corre en UTC por defecto. Sin TZ, `astimezone()` mostraria
       # UTC y no la hora local de la demo. Se puede cambiar con DEMO_TZ.

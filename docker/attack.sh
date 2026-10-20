@@ -7,10 +7,18 @@
 #   3. HTTP flood  -> perfil `satan`:  muchas conexiones con carga y respuesta
 #
 # `ATTACK` elige que correr (default `all`, el comportamiento historico):
-#   ATTACK=1    solo SYN flood
-#   ATTACK=2    solo escaneo de puertos
-#   ATTACK=3    solo inundacion HTTP
-#   ATTACK=all  los tres, espaciados en el tiempo
+#   ATTACK=1       solo SYN flood
+#   ATTACK=2       solo escaneo de puertos
+#   ATTACK=3       solo inundacion HTTP
+#   ATTACK=all     los tres, espaciados en el tiempo
+#   ATTACK=normal  solo trafico normal (30 GET HTTP a la victima)
+#
+# `TRAFFIC` agrega trafico normal EN PARALELO a un ataque:
+#   TRAFFIC=none    (default) solo el ataque
+#   TRAFFIC=normal  corre normal_traffic en segundo plano mientras ataca
+#
+# El trafico normal debe salir desde este contenedor: comparte el netns del
+# NIDS (`network_mode: service:nids`), asi que es el unico que el detector ve.
 #
 # El espaciado importa: el NIDS clasifica por ventanas de 2 s, asi que los
 # ataques tienen que caer en ventanas distintas para verse por separado.
@@ -26,12 +34,21 @@ set -u
 TARGET="${1:-victim}"
 NIDS_WARMUP="${NIDS_WARMUP:-12}"
 ATTACK="${ATTACK:-all}"
+TRAFFIC="${TRAFFIC:-none}"
 
 case "${ATTACK}" in
-    1|2|3) TOTAL=1 ;;
+    1|2|3|normal) TOTAL=1 ;;
     all) TOTAL=3 ;;
     *)
-        echo "ATTACK invalido: '${ATTACK}'. Usa 1, 2, 3 o all." >&2
+        echo "ATTACK invalido: '${ATTACK}'. Usa 1, 2, 3, all o normal." >&2
+        exit 2
+        ;;
+esac
+
+case "${TRAFFIC}" in
+    none|normal) ;;
+    *)
+        echo "TRAFFIC invalido: '${TRAFFIC}'. Usa none o normal." >&2
         exit 2
         ;;
 esac
@@ -52,15 +69,47 @@ enabled() {
     [ "${ATTACK}" = "all" ] || [ "${ATTACK}" = "$1" ]
 }
 
+# Trafico legitimo: 30 GET HTTP espaciados 0.5 s. Cada curl corta solo con
+# -m 2, asi que ni una victima colgada puede dejar el script esperando.
+normal_traffic() {
+    echo ">>> Tráfico normal: 30 requests HTTP GET a http://${TARGET}/"
+    for _ in $(seq 1 30); do
+        curl -s -m 2 -o /dev/null "http://${TARGET}/" || true
+        sleep 0.5
+    done
+    echo "    Tráfico normal terminado (30 requests)"
+}
+
 echo "=============================================="
 echo " ATACANTE - objetivo: ${TARGET}"
 echo " Ataque(s): ${ATTACK}"
+if [ "${TRAFFIC}" = "normal" ]; then
+    echo " Tráfico normal: en paralelo"
+fi
 echo "=============================================="
 if [ "${NIDS_WARMUP}" -gt 0 ]; then
     echo "Esperando ${NIDS_WARMUP}s a que el NIDS empiece a capturar..."
     sleep "${NIDS_WARMUP}"
 else
     echo "NIDS_WARMUP=0: arrancando sin espera inicial."
+fi
+
+# ATTACK=normal: solo trafico legitimo, sin ataques.
+if [ "${ATTACK}" = "normal" ]; then
+    normal_traffic
+    echo ""
+    echo "=============================================="
+    echo " Tráfico normal completado. Revisa la salida del NIDS."
+    echo "=============================================="
+    exit 0
+fi
+
+# TRAFFIC=normal: el trafico legitimo sale en paralelo mientras corre el ataque.
+# Se espera al final para que el script no termine antes que estos requests.
+NORMAL_PID=""
+if [ "${TRAFFIC}" = "normal" ]; then
+    normal_traffic &
+    NORMAL_PID=$!
 fi
 
 if enabled 1; then
@@ -99,9 +148,15 @@ FLOOD
     sleep 4
 fi
 
+if [ -n "${NORMAL_PID}" ]; then
+    wait "${NORMAL_PID}" || true
+fi
+
 echo ""
 echo "=============================================="
-if [ "${TOTAL}" -eq 1 ]; then
+if [ "${TRAFFIC}" = "normal" ]; then
+    echo " Ataque(s) y tráfico normal completados. Revisa la salida del NIDS."
+elif [ "${TOTAL}" -eq 1 ]; then
     echo " Ataque completado. Revisa la salida del NIDS."
 else
     echo " Ataques completados. Revisa la salida del NIDS."

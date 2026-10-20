@@ -17,6 +17,10 @@ from .schema import PORT_TO_SERVICE, FlowFeatures
 BURST_WINDOW_SEC: Final[float] = 2.0
 HOST_WINDOW_SEC: Final[float] = 100.0
 
+#: Gracia para descartar el ACK/FIN que llega despues de emitir un flujo.
+#: Sin esto, el ultimo paquete de una conexion crea un flujo fantasma `OTH`.
+LATE_PACKET_GRACE_SEC: Final[float] = 5.0
+
 
 @dataclass(frozen=True, slots=True)
 class Packet:
@@ -99,12 +103,13 @@ class FlowAggregator:
         flows = agg.close_window()
     """
 
-    __slots__ = ("_flows", "_origin_directions", "window_sec")
+    __slots__ = ("_flows", "_origin_directions", "_recently_emitted", "window_sec")
 
     def __init__(self, window_sec: float = BURST_WINDOW_SEC) -> None:
         self.window_sec: float = window_sec
         self._flows: dict[tuple[str, str, int, int, str], _FlowState] = {}
         self._origin_directions: dict[tuple[str, str, int, int, str], bool] = {}
+        self._recently_emitted: dict[tuple[str, str, int, int, str], float] = {}
 
     def add(self, pkt: Packet) -> None:
         """Registra un paquete en su flujo. La primera direccion vista es el origen.
@@ -116,6 +121,28 @@ class FlowAggregator:
         """
         key = (pkt.src_ip, pkt.dst_ip, pkt.src_port, pkt.dst_port, pkt.proto)
         reverse = (pkt.dst_ip, pkt.src_ip, pkt.dst_port, pkt.src_port, pkt.proto)
+
+        if self._recently_emitted:
+            cutoff = pkt.timestamp - LATE_PACKET_GRACE_SEC
+            self._recently_emitted = {
+                flow_key: seen
+                for flow_key, seen in self._recently_emitted.items()
+                if seen >= cutoff
+            }
+
+        # Un paquete que no inicia conexion y cae en un flujo recien emitido es
+        # el resto (ACK/FIN) de esa conexion, no una conexion nueva. Si no se
+        # descarta, aparece un flujo fantasma `OTH` de 1 paquete que el modelo
+        # puede puntuar como ataque aunque el trafico sea benigno.
+        if not (pkt.flags.startswith("S") and "A" not in pkt.flags):
+            emitted_at = self._recently_emitted.get(key)
+            if emitted_at is None:
+                emitted_at = self._recently_emitted.get(reverse)
+            if emitted_at is not None and pkt.timestamp - emitted_at <= LATE_PACKET_GRACE_SEC:
+                return
+        else:
+            self._recently_emitted.pop(key, None)
+            self._recently_emitted.pop(reverse, None)
 
         if key in self._flows:
             self._flows[key].observe(pkt, src_is_origin=self._origin_directions[key])
@@ -189,6 +216,8 @@ class FlowAggregator:
                     dst_host_same_srv_rate=same_srv,
                 )
             )
+            # Memoriza la clave para descartar los ACK/FIN que lleguen tarde.
+            self._recently_emitted[key] = state.last_seen
 
         self._flows = keep
         self._origin_directions = {k: v for k, v in self._origin_directions.items() if k in keep}
@@ -198,6 +227,7 @@ class FlowAggregator:
         """Descarta el estado de la ventana."""
         self._flows.clear()
         self._origin_directions.clear()
+        self._recently_emitted.clear()
 
     @property
     def active_count(self) -> int:

@@ -4,7 +4,8 @@
 
 .DESCRIPTION
     Levanta victim, nids (con detector indefinido) y dashboard, y permite lanzar
-    los ataques de a uno para ver las alertas aparecer en el panel web.
+    los ataques de a uno para ver las alertas aparecer en el panel web. También
+    puede generar solo tráfico normal o combinar un ataque con tráfico normal.
 
     El script se ubica solo en la carpeta del repositorio. No usa Python ni uv
     del host: todo corre dentro de los contenedores.
@@ -12,30 +13,45 @@
     Al entrar al menú abre el dashboard si no estaba corriendo y muestra el link
     http://localhost:8501. No abre el navegador automáticamente.
 
-    Al terminar cada ataque detiene nids de forma limpia (SIGTERM) para que
+    Al terminar cada corrida detiene nids de forma limpia (SIGTERM) para que
     vuelque los flujos que siguen abiertos (por ejemplo, SYNs sin respuesta) y
-    recién entonces cuenta las alertas nuevas. Después lo vuelve a levantar,
-    siempre con NIDS_DURATION=0, para encadenar el ataque siguiente.
+    recién entonces cuenta los eventos nuevos. Después lo vuelve a levantar,
+    siempre con NIDS_DURATION=0, para encadenar la corrida siguiente.
+
+    UMBRAL DE DEMO: el artefacto usa 0.05, pero el tráfico benigno medido puntúa
+    ~0.13-0.16. En las corridas que incluyen tráfico normal se setea
+    NIDS_THRESHOLD=0.30 (override solo de demo) para no clasificar ese tráfico
+    como ataque. Los ataques de la demo puntúan ~0.53-0.80, así que se siguen
+    detectando. Las corridas de solo ataque usan el umbral del artefacto.
 
 .PARAMETER Attack
-    Corre un solo ataque sin mostrar el menú y termina. Valores: 1, 2, 3 o all.
-    Es útil para automatizar y para probar el script. En este modo no pregunta
-    nada y NO levanta el dashboard (solo victim y nids).
+    Corre una sola corrida sin mostrar el menú y termina. Valores: normal, 1,
+    2, 3 o all. Es útil para automatizar y para probar el script. En este modo
+    no pregunta nada y NO levanta el dashboard (solo victim y nids).
+
+.PARAMETER WithNormal
+    Junto con -Attack 1/2/3/all, agrega tráfico normal en paralelo al ataque
+    (equivale a la opción 6 del menú). Con -Attack normal no hace falta.
 
 .EXAMPLE
     .\demo-menu.ps1
 
 .EXAMPLE
+    .\demo-menu.ps1 -Attack normal
+
+.EXAMPLE
     .\demo-menu.ps1 -Attack 1
 
 .EXAMPLE
-    .\demo-menu.ps1 -Attack all
+    .\demo-menu.ps1 -Attack all -WithNormal
 #>
 
 [CmdletBinding()]
 param(
-    [ValidateSet('1', '2', '3', 'all')]
-    [string]$Attack
+    [ValidateSet('normal', '1', '2', '3', 'all')]
+    [string]$Attack,
+
+    [switch]$WithNormal
 )
 
 # PowerShell 5.1 convierte el stderr de los comandos nativos (los mensajes de
@@ -64,11 +80,27 @@ $DashboardUrl = 'http://localhost:8501'
 # Detector indefinido: permite encadenar varios ataques sin que se corte a los 90 s.
 $env:NIDS_DURATION = '0'
 
+# El menú controla el override: arranca sin él para que el NIDS use el artefacto.
+Remove-Item Env:NIDS_THRESHOLD -ErrorAction SilentlyContinue
+
+# Umbrales medidos en esta demo:
+#   tráfico benigno (24 flujos HTTP): 0.133 - 0.160
+#   ataques: SYN 0.797 · escaneo 0.533-0.567 · flood HTTP 0.660
+# 0.30 separa benigno de ataque y deja margen para variaciones normales.
+$script:DemoThreshold = '0.30'
+$script:ArtifactThreshold = '0.05'
+
 if ($Attack) {
     $Attack = $Attack.ToLowerInvariant()
 }
 
 $script:AttackCatalog = @(
+    [pscustomobject]@{
+        Id = 'normal'
+        Name = 'Solo tráfico normal'
+        Perfil = 'tráfico legítimo'
+        Detalle = '30 requests HTTP GET a la víctima (sin ataque)'
+    }
     [pscustomobject]@{
         Id = '1'
         Name = 'SYN flood'
@@ -225,6 +257,33 @@ function Start-Nids {
     return $true
 }
 
+function Set-NidsThreshold {
+    param([string]$Value)
+
+    # Vacío = sin override: el detector usa el umbral del artefacto (0.05).
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        Remove-Item Env:NIDS_THRESHOLD -ErrorAction SilentlyContinue
+        $shown = $script:ArtifactThreshold
+    } else {
+        $env:NIDS_THRESHOLD = $Value
+        $shown = $Value
+    }
+
+    # `up -d` recrea el contenedor solo si cambió el entorno. Es la única forma
+    # de que un proceso ya creado lea la variable nueva.
+    & docker compose up -d nids *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '[!] No se pudo aplicar el umbral al NIDS.' -ForegroundColor Yellow
+        return $false
+    }
+    if (-not (Wait-NidsReady -TimeoutSeconds 30)) {
+        Write-Host '[!] El NIDS no confirmó que esté capturando tras el cambio de umbral.' -ForegroundColor Yellow
+        return $false
+    }
+    Write-Host ("[OK] NIDS con umbral {0}." -f $shown) -ForegroundColor Green
+    return $true
+}
+
 function Ensure-Base {
     Write-Host '[..] Asegurando victim y nids (detector indefinido)...' -ForegroundColor Cyan
     & docker compose up -d victim nids *> $null
@@ -277,17 +336,30 @@ function Ensure-Dashboard {
     return $true
 }
 
-function Get-AlertCount {
+function Get-AlertSnapshot {
     param([string]$Path)
 
+    $snapshot = [pscustomobject]@{
+        Total   = 0
+        Attacks = 0
+        Normals = 0
+    }
     if (-not (Test-Path -LiteralPath $Path)) {
-        return 0
+        return $snapshot
     }
     $lines = Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue
-    if ($null -eq $lines) {
-        return 0
+    foreach ($line in @($lines)) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        $snapshot.Total++
+        if ($line -match '"label":"ataque"') {
+            $snapshot.Attacks++
+        } elseif ($line -match '"label":"normal"') {
+            $snapshot.Normals++
+        }
     }
-    return @($lines).Count
+    return $snapshot
 }
 
 function Get-AttackInfo {
@@ -301,21 +373,21 @@ function Get-AttackInfo {
     return $null
 }
 
-function Show-NewAlerts {
+function Show-NewEvents {
     param(
         [string]$Path,
         [int]$NewCount
     )
 
     if ($NewCount -le 0) {
-        Write-Host '    No se registraron alertas nuevas.' -ForegroundColor Yellow
-        Write-Host '    Revisá que nids esté capturando y que el ataque haya durado lo suficiente.' -ForegroundColor DarkGray
+        Write-Host '    No se registraron eventos nuevos.' -ForegroundColor Yellow
+        Write-Host '    Revisá que nids esté capturando y que la corrida haya durado lo suficiente.' -ForegroundColor DarkGray
         return
     }
 
     $tailCount = [math]::Min($NewCount, 10)
     $lines = @(Get-Content -LiteralPath $Path -Tail $tailCount -ErrorAction SilentlyContinue)
-    Write-Host ("    Últimas {0} alerta(s) nuevas:" -f $tailCount) -ForegroundColor White
+    Write-Host ("    Últimos {0} evento(s) nuevos:" -f $tailCount) -ForegroundColor White
     Write-Host ("    {0,-10} {1,-9} {2,7}  {3}" -f 'hora', 'veredicto', 'score', 'detalle') -ForegroundColor DarkGray
 
     foreach ($line in $lines) {
@@ -345,12 +417,15 @@ function Show-NewAlerts {
     }
 
     if ($NewCount -gt $tailCount) {
-        Write-Host ("    ... y {0} alerta(s) más (ver dashboard)." -f ($NewCount - $tailCount)) -ForegroundColor DarkGray
+        Write-Host ("    ... y {0} evento(s) más (ver dashboard)." -f ($NewCount - $tailCount)) -ForegroundColor DarkGray
     }
 }
 
 function Invoke-Attack {
-    param([string]$Selection)
+    param(
+        [string]$Selection,
+        [switch]$WithNormal
+    )
 
     $info = Get-AttackInfo -Id $Selection
     if ($null -eq $info) {
@@ -358,53 +433,103 @@ function Invoke-Attack {
         return
     }
 
-    Write-Header ("ATAQUE: {0}" -f $info.Name)
+    # ATTACK=normal ya es tráfico normal; con un ataque, -WithNormal agrega
+    # tráfico normal en paralelo.
+    $soloNormal = ($Selection -eq 'normal')
+    $normalEnParalelo = (-not $soloNormal) -and $WithNormal.IsPresent
+    $usesNormal = $soloNormal -or $normalEnParalelo
+
+    Write-Header ("CORRIDA: {0}" -f $info.Name)
     Write-Host ("  Perfil NSL-KDD : {0}" -f $info.Perfil) -ForegroundColor DarkGray
     Write-Host ("  Qué hace       : {0}" -f $info.Detalle) -ForegroundColor DarkGray
 
-    $before = Get-AlertCount -Path $AlertsPath
+    if ($usesNormal) {
+        Write-Host ("  Umbral         : {0} (demo, NIDS_THRESHOLD)" -f $script:DemoThreshold) -ForegroundColor Yellow
+        Write-Host '                   el artefacto usa 0.05; el benigno medido puntúa ~0.13-0.16' -ForegroundColor DarkGray
+    } else {
+        Write-Host ("  Umbral         : {0} (artefacto)" -f $script:ArtifactThreshold) -ForegroundColor DarkGray
+    }
+    if ($normalEnParalelo) {
+        Write-Host '  Tráfico normal : sí, en paralelo al ataque' -ForegroundColor DarkGray
+    } elseif ($soloNormal) {
+        Write-Host '  Tráfico normal : sí, sin ataques' -ForegroundColor DarkGray
+    }
+
+    # El contenedor NIDS ya está creado: hay que recrearlo para que lea la
+    # variable de entorno nueva antes de generar tráfico.
+    if ($usesNormal) {
+        if (-not (Set-NidsThreshold -Value $script:DemoThreshold)) {
+            return
+        }
+    } else {
+        if (-not (Set-NidsThreshold -Value '')) {
+            return
+        }
+    }
+
+    $before = Get-AlertSnapshot -Path $AlertsPath
     $started = Get-Date
 
     # stderr de `docker compose` son solo mensajes de estado ("Creating...");
     # el ataque escribe su progreso por stdout y se ve en vivo.
-    & docker compose run --rm -e "ATTACK=$Selection" -e "NIDS_WARMUP=0" attacker 2>$null
+    $dockerArgs = @(
+        'compose', 'run', '--rm',
+        '-e', "ATTACK=$Selection",
+        '-e', 'NIDS_WARMUP=0'
+    )
+    if ($normalEnParalelo) {
+        $dockerArgs += @('-e', 'TRAFFIC=normal')
+    }
+    $dockerArgs += 'attacker'
+
+    & docker @dockerArgs 2>$null
     $exitCode = $LASTEXITCODE
 
     $elapsed = ((Get-Date) - $started).TotalSeconds
 
     # El detector conserva abiertos los flujos que no vieron FIN/RST (un SYN
     # flood entero). El SIGTERM dispara el flush final y los persiste; sin este
-    # paso, las alertas del ataque 1 no aparecerian hasta apagar el NIDS.
+    # paso, los eventos del ataque 1 no aparecerian hasta apagar el NIDS.
     [void](Stop-NidsToFlush)
 
-    $after = Get-AlertCount -Path $AlertsPath
-    $newAlerts = $after - $before
-    if ($newAlerts -lt 0) {
-        $newAlerts = 0
+    $after = Get-AlertSnapshot -Path $AlertsPath
+    $newAttacks = $after.Attacks - $before.Attacks
+    if ($newAttacks -lt 0) {
+        $newAttacks = 0
     }
+    $newNormals = $after.Normals - $before.Normals
+    if ($newNormals -lt 0) {
+        $newNormals = 0
+    }
+    $newEvents = $newAttacks + $newNormals
 
-    # Se vuelve a levantar para que el proximo ataque tenga detector en vivo.
+    # Se vuelve a levantar para que la proxima corrida tenga detector en vivo.
     [void](Start-Nids)
 
     if ($exitCode -ne 0) {
         Write-Host ("[!] El atacante terminó con código {0}." -f $exitCode) -ForegroundColor Yellow
     }
 
-    $alertColor = 'Yellow'
-    if ($newAlerts -gt 0) {
-        $alertColor = 'Green'
+    $attackColor = 'Yellow'
+    if ($newAttacks -gt 0) {
+        $attackColor = 'Green'
+    }
+    $normalColor = 'Yellow'
+    if ($newNormals -gt 0) {
+        $normalColor = 'Green'
     }
 
     Write-Host ''
     Write-Host '  RESUMEN' -ForegroundColor Cyan
     Write-Host ('  ' + ('-' * 54)) -ForegroundColor DarkGray
-    Write-Host ("    Ataque          : {0}" -f $info.Name)
-    Write-Host ("    Alertas nuevas  : {0}" -f $newAlerts) -ForegroundColor $alertColor
-    Write-Host ("    Duración aprox. : {0:N1} s" -f $elapsed)
+    Write-Host ("    Corrida                  : {0}" -f $info.Name)
+    Write-Host ("    Alertas nuevas (ataques) : {0}" -f $newAttacks) -ForegroundColor $attackColor
+    Write-Host ("    Flujos normales nuevos   : {0}" -f $newNormals) -ForegroundColor $normalColor
+    Write-Host ("    Duración aprox.          : {0:N1} s" -f $elapsed)
     Write-Host ''
     Write-Host '  RESULTADOS' -ForegroundColor Cyan
     Write-Host ('  ' + ('-' * 54)) -ForegroundColor DarkGray
-    Show-NewAlerts -Path $AlertsPath -NewCount $newAlerts
+    Show-NewEvents -Path $AlertsPath -NewCount $newEvents
     Write-Host ''
     Write-Host ("    Detalle completo: {0}" -f $DashboardUrl) -ForegroundColor Cyan
 }
@@ -413,11 +538,16 @@ function Show-Menu {
     Write-Header 'NIDS-ML · Menú de demostración'
     Write-Host ("  Dashboard: {0}" -f $DashboardUrl) -ForegroundColor DarkGray
     Write-Host ''
-    Write-Host '  1) SYN flood          (perfil neptune: SYNs sin respuesta)'
-    Write-Host '  2) Escaneo de puertos (perfil nmap)'
-    Write-Host '  3) Inundación HTTP    (perfil satan)'
-    Write-Host '  4) Los tres ataques'
-    Write-Host '  5) Salir'
+    Write-Host '  1) Solo tráfico normal'
+    Write-Host '  2) SYN flood                 (perfil neptune: SYNs sin respuesta)'
+    Write-Host '  3) Escaneo de puertos        (perfil nmap)'
+    Write-Host '  4) Inundación HTTP           (perfil satan)'
+    Write-Host '  5) Los tres ataques'
+    Write-Host '  6) Ataque + tráfico normal   (pregunta cuál ataque: 1/2/3/all)'
+    Write-Host '  7) Salir'
+    Write-Host ''
+    Write-Host '  Nota: las corridas con tráfico normal usan umbral de demo 0.30' -ForegroundColor DarkGray
+    Write-Host '        (el artefacto usa 0.05; el benigno medido puntúa ~0.13-0.16).' -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -431,15 +561,24 @@ function Start-Menu {
 
     while ($true) {
         Show-Menu
-        $option = ([string](Read-Host '  Elegí una opción [1-5]')).Trim()
+        $option = ([string](Read-Host '  Elegí una opción [1-7]')).Trim()
 
         $selection = ''
+        $withNormal = $false
         switch ($option) {
-            '1' { $selection = '1' }
-            '2' { $selection = '2' }
-            '3' { $selection = '3' }
-            '4' { $selection = 'all' }
-            '5' { return }
+            '1' { $selection = 'normal' }
+            '2' { $selection = '1' }
+            '3' { $selection = '2' }
+            '4' { $selection = '3' }
+            '5' { $selection = 'all' }
+            '6' {
+                $which = ([string](Read-Host '  ¿Qué ataque? [1=SYN flood, 2=escaneo, 3=HTTP flood, all=los tres]')).Trim().ToLowerInvariant()
+                if ($which -in @('1', '2', '3', 'all')) {
+                    $selection = $which
+                    $withNormal = $true
+                }
+            }
+            '7' { return }
             default { $selection = '' }
         }
 
@@ -449,7 +588,11 @@ function Start-Menu {
             continue
         }
 
-        Invoke-Attack -Selection $selection
+        if ($withNormal) {
+            Invoke-Attack -Selection $selection -WithNormal
+        } else {
+            Invoke-Attack -Selection $selection
+        }
 
         $again = Read-Host '  ¿Volver al menú? (s/n)'
         if (-not (Test-Yes -Answer $again)) {
@@ -479,18 +622,26 @@ function Invoke-ShutdownPrompt {
 }
 
 Write-Header 'NIDS-ML · Demo interactiva (solo Docker)'
-Write-Host '  Verificá Docker, levantá el detector y lanzá ataques de a uno.' -ForegroundColor DarkGray
+Write-Host '  Verificá Docker, levantá el detector y lanzá tráfico normal o ataques.' -ForegroundColor DarkGray
 
 if (-not (Test-Docker)) {
     exit 1
 }
 
 if ($Attack) {
-    Write-Host ("[..] Modo automático: un solo ataque ({0}), sin menú." -f $Attack) -ForegroundColor Cyan
+    $mode = 'una corrida'
+    if ($WithNormal -and $Attack -ne 'normal') {
+        $mode = 'ataque + tráfico normal'
+    }
+    Write-Host ("[..] Modo automático: {0} ({1}), sin menú." -f $mode, $Attack) -ForegroundColor Cyan
     if (-not (Ensure-Base)) {
         exit 1
     }
-    Invoke-Attack -Selection $Attack
+    if ($WithNormal) {
+        Invoke-Attack -Selection $Attack -WithNormal
+    } else {
+        Invoke-Attack -Selection $Attack
+    }
     if ((Test-ContainerRunning -Name 'nids-dashboard') -and (Test-DashboardHttp)) {
         Write-Host ("  Dashboard: {0}" -f $DashboardUrl) -ForegroundColor Cyan
     }
