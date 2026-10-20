@@ -4,6 +4,40 @@
 # permisos de captura. En Linux basta `CAP_NET_ADMIN`; en Windows hace falta
 # Npcap y terminal de administrador. El contenedor elimina esa dependencia del
 # PC de presentacion.
+#
+# Build multi-etapa: la etapa `trainer` entrena el modelo DENTRO del build
+# (baja NSL-KDD y corre `scripts/bootstrap.py --train-only`) y la etapa final
+# copia el artefacto ya entrenado. Asi `docker compose up --build` funciona en
+# un clon limpio, donde `models/` no existe porque esta gitignoreado. Requiere
+# internet durante el build (el dataset se baja en ese momento).
+
+# ── Etapa 1: entrenamiento ──────────────────────────────────────────────
+FROM python:3.12-slim AS trainer
+
+WORKDIR /app
+
+# Dependencias del entrenamiento. Solo las que importa `src.train` (+ `rich`
+# que usa `bootstrap.py`): nada de scapy ni streamlit, que son de runtime.
+RUN pip install --no-cache-dir \
+        "scikit-learn>=1.5" \
+        "polars>=1.9" \
+        "numpy>=2.0" \
+        "joblib>=1.4" \
+        "pydantic>=2.8" \
+        "typer>=0.12" \
+        "rich>=13.7"
+
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Genera `models/pipeline.joblib`. `--train-only` corre dataset + entrenamiento
+# y omite la verificacion, que necesitaria scapy y una interfaz de red.
+RUN python scripts/bootstrap.py --train-only
+
+# ── Etapa 2: runtime ────────────────────────────────────────────────────
 FROM python:3.12-slim
 
 # libpcap: scapy la usa para capturar de forma nativa (mas rapido que su lector
@@ -34,9 +68,9 @@ COPY scripts/ ./scripts/
 COPY dashboard.py ./
 
 # El artefacto entrenado entra en la imagen: asi `docker compose up` funciona
-# en cualquier PC sin Python, sin uv y sin descargar el dataset. Se genera con
-# `scripts/bootstrap.py` (o lo entrena la CI) antes del build.
-COPY models/ ./models/
+# en cualquier PC sin Python, sin uv y sin descargar el dataset. Lo produce la
+# etapa `trainer`; NO se copia de `models/`, que no existe en un clon limpio.
+COPY --from=trainer /app/models ./models/
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

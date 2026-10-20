@@ -138,13 +138,30 @@ def main(
     console.print(f"Capturando en {iface}... Ctrl-C para terminar.\n")
 
     started = time.monotonic()
-    while not _STOP.is_set():
-        if duration and time.monotonic() - started >= duration:
-            break
-        sniff(iface=iface, prn=nids.observe, store=False, timeout=SNIFF_SLICE)
+    deadline = started + duration if duration else None
 
-    nids.flush(final=True)
-    _summary(nids, time.monotonic() - started)
+    def _past_deadline(_packet: ScapyPacket) -> bool:
+        """Corta la captura cuando vence `--duration`."""
+        return deadline is not None and time.monotonic() >= deadline
+
+    # `sniff(timeout=)` solo corta tras un silencio: bajo flood continuo no
+    # expira nunca. `stop_filter` corta al cruzar el deadline aunque los
+    # paquetes no paren de llegar, y el `finally` garantiza el resumen (tambien
+    # con Ctrl-C).
+    try:
+        while not _STOP.is_set():
+            sniff(
+                iface=iface,
+                prn=nids.observe,
+                store=False,
+                timeout=SNIFF_SLICE,
+                stop_filter=_past_deadline,
+            )
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+    finally:
+        nids.flush(final=True)
+        _summary(nids, time.monotonic() - started)
 
 
 if __name__ == "__main__":

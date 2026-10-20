@@ -82,7 +82,7 @@ ventanas de 2 s, así que cada ataque debe caer en ventanas distintas):
 
 | # | Ataque | Herramienta | Perfil NSL-KDD |
 |---|---|---|---|
-| 1 | SYN flood | `hping3 -S --flood --rand-source` | `neptune` |
+| 1 | SYN flood | `hping3 -S -c 400 -i u2000 --rand-source` | `neptune` |
 | 2 | Escaneo de puertos | `nmap -sS -p 1-300` | `nmap` |
 | 3 | Inundación HTTP | `curl` en paralelo con POST de 800 B | `satan` |
 
@@ -96,7 +96,7 @@ inventados: son los que el dataset describe.
 Del contenedor `nids-detector`:
 
 ```
-ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
+ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
        └── prob.  └── protocolo/servicio  └─ estado TCP
 ```
 

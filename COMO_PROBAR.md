@@ -133,9 +133,9 @@ Después de ~12 segundos empieza el ataque:
 
 ```
 nids-attacker  | >>> [1/3] SYN flood (perfil neptune)
-nids-detector  | ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
-nids-detector  | ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
-nids-detector  | ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
+nids-detector  | ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
+nids-detector  | ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
+nids-detector  | ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
 ```
 
 ### 🎯 Lo importante: esas líneas `ALERTA`

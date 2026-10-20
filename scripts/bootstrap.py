@@ -1,13 +1,17 @@
 """Prepara el proyecto desde cero: descarga el dataset, entrena y verifica.
 
     uv run python scripts/bootstrap.py
+    uv run python scripts/bootstrap.py --force
+    uv run python scripts/bootstrap.py --train-only
 
 Lo corren por igual un companero que clona el repo y la CI que construye la
 imagen. Al terminar deja `models/pipeline.joblib` listo y comprueba que el
 sistema responde.
 
 Es idempotente: si el dataset ya esta, no lo vuelve a bajar; si el artefacto ya
-existe, lo reporta sin reentrenar (usa `--force` para forzar).
+existe, lo reporta sin reentrenar (usa `--force` para forzar). Con `--train-only`
+se detiene tras el entrenamiento, sin correr la verificacion: lo usa el build de
+Docker, que no tiene red ni interfaz para la demo.
 """
 
 from __future__ import annotations
@@ -90,12 +94,19 @@ def verify() -> None:
 
 
 def main() -> int:
-    """Ejecuta las tres etapas. Devuelve 0 si todo sale bien."""
+    """Ejecuta las etapas. Devuelve 0 si todo sale bien.
+
+    `--force` reentrena aunque el artefacto ya exista. `--train-only` se detiene
+    tras el entrenamiento (lo usa el build de Docker, que no puede verificar la
+    demo: no hay red ni una interfaz para capturar).
+    """
     force = "--force" in sys.argv
+    train_only = "--train-only" in sys.argv
     console.rule("[bold]NIDS-ML - preparacion completa[/bold]")
     fetch_dataset()
     train(force)
-    verify()
+    if not train_only:
+        verify()
     console.print("\n[bold green]Listo.[/bold green]")
     console.print("  Demo en vivo:  [cyan]docker compose up --build[/cyan]")
     console.print("  Dashboard:     [cyan]uv run streamlit run dashboard.py[/cyan]")

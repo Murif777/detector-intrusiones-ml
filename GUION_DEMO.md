@@ -11,8 +11,8 @@ el ataque y la detección en vivo.
 ┌─────────────────────┬─────────────────────┐
 │ TERMINAL A          │  NAVEGADOR          │
 │ NIDS capturando     │  Dashboard          │
-│ ALERTA score=0.718  │  (se actualiza solo │
-│ ALERTA score=0.722  │   cada 2 segundos)  │
+│ ALERTA score=0.797  │  (se actualiza solo │
+│ ALERTA score=0.797  │   cada 2 segundos)  │
 │ ALERTA score=0.801  │                     │
 ├─────────────────────┼─────────────────────┤
 │ TERMINAL B          │  TERMINAL C         │
@@ -107,17 +107,17 @@ nids-attacker  |     Flood HTTP terminado (60 peticiones)
 
 **Y SIMULTÁNEAMENTE, en Terminal A, van apareciendo:**
 ```
-nids-detector  | ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
-nids-detector  | ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
-nids-detector  | ALERTA score=0.722 tcp/https flag=S0 src_bytes=0 serror=1.00
+nids-detector  | ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
+nids-detector  | ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
+nids-detector  | ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
 nids-detector  | ALERTA score=0.801 tcp/http  flag=S1 src_bytes=1184 serror=0.00
 ```
 
 **Y en el navegador**, el dashboard se actualiza solo:
 | hora | veredicto | score | proto | servicio | flag | paquetes |
 |---|---|---|---|---|---|---|
-| 14:32:07 | ATAQUE | 0.718 | tcp | https | S0 | 1 |
-| 14:32:07 | ATAQUE | 0.718 | tcp | https | S0 | 1 |
+| 14:32:07 | ATAQUE | 0.797 | tcp | http | S0 | 1 |
+| 14:32:07 | ATAQUE | 0.797 | tcp | http | S0 | 1 |
 | 14:32:11 | ATAQUE | 0.801 | tcp | http | S1 | 16 |
 
 **Lo que dices** (señalando la Terminal A):

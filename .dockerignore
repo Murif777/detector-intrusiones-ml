@@ -14,9 +14,11 @@ data/
 docs/
 output/
 
-# Nota: models/ SI entra en el contexto. La imagen publicada lleva el artefacto
-# adentro para que `docker compose up` funcione sin pasos previos. Se genera
-# con `scripts/bootstrap.py` antes del build.
+# models/ tampoco entra en el contexto: el artefacto ya no viene del host. Lo
+# entrena la etapa `trainer` del Dockerfile multi-etapa y entra a la imagen
+# final con `COPY --from=trainer`. Asi el build funciona en un clon limpio
+# (models/ esta gitignoreado y no existe).
+models/
 
 # Tests y documentacion no hacen falta dentro del contenedor.
 tests/

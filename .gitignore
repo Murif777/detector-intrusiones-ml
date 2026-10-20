@@ -24,3 +24,14 @@ output/
 .omo/
 .vscode/
 .idea/
+
+# Caches de herramientas y archivos locales
+.basedpyright/
+.mypy_cache/
+htmlcov/
+.coverage
+.DS_Store
+Thumbs.db
+.env
+.env.*
+DEMO_RESPALDO.txt
