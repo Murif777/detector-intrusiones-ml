@@ -663,8 +663,9 @@ host.
 - **`nids`**: corre `scripts/live_nids.py`. Carga el modelo desde la imagen,
   imprime `modelo: random_forest   umbral: 0.05`, captura con Scapy en `eth0`,
   agrupa paquetes en ventanas de **2 segundos** (y una ventana de host de 100
-  segundos), arma 24 features por flujo y clasifica. Si el score supera el
-  umbral, imprime `ALERTA ...` y agrega una línea JSON a
+  segundos), arma el vector con las 23 features soportadas por flujo (20
+  numéricas + 3 categóricas) y clasifica. Si el score supera el umbral, imprime
+  `ALERTA ...` y agrega una línea JSON a
   `output/alertas.jsonl`.
 - **`attacker`**: corre `docker/attack.sh`. Lanza 400 SYN (SYN flood), un
   escaneo SYN de 300 puertos y 60 peticiones HTTP. Cada ataque tiene `timeout`:
@@ -677,9 +678,9 @@ host.
 ### El modelo y el umbral 0.05
 
 - **Random Forest** de 300 árboles, con `class_weight="balanced"`.
-- Usa **24 de las 41 features** de NSL-KDD. Las otras 18 no se pueden derivar
-  del tráfico capturado en vivo; quedan en 0 y están documentadas. No se
-  inventan features.
+- Usa **23 de las 41 features** de NSL-KDD (20 numéricas + 3 categóricas). Las
+  otras 18 no se pueden derivar del tráfico capturado en vivo; quedan en 0 y
+  están documentadas. No se inventan features.
 - **Umbral de decisión: 0.05**, no el 0.5 que usa scikit-learn por defecto.
   Es una decisión deliberada: en un NIDS, una alerta de más se revisa; un ataque
   perdido no se recupera. Con 0.5 el recall bajaba a 0.64 (se perdía un tercio
