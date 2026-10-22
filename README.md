@@ -47,7 +47,7 @@ Vas a ver tres contenedores arrancar, un atacante lanzando tres familias de
 ataques, y al NIDS imprimiendo alertas en vivo:
 
 ```
-ALERTA score=0.718 tcp/https flag=S0 src_bytes=0 serror=1.00
+ALERTA score=0.797 tcp/http flag=S0 src_bytes=0 serror=1.00
 ```
 
 ### Si quieres explorar el código
@@ -64,6 +64,11 @@ uv run pytest                        # 77 tests
 uv run python scripts/bootstrap.py --force
 docker compose up --build            # reconstruye con el modelo nuevo
 ```
+
+Ojo: `docker compose up --build` **entrena dentro del build**. La imagen tiene
+una etapa `trainer` que baja NSL-KDD y corre `scripts/bootstrap.py --train-only`
+antes de copiar el artefacto. Por eso el primer build **necesita internet y
+tarda unos minutos**.
 
 ---
 

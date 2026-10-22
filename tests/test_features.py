@@ -107,6 +107,37 @@ def test_closed_flow_is_emitted_and_state_released() -> None:
     assert aggregator.close_window(final=True) == []
 
 
+def test_late_ack_after_emission_is_discarded() -> None:
+    """Given un ACK que llega tras emitir el flujo, Then no hay flujo fantasma.
+
+    Sin esto, el ultimo ACK/FIN de una conexion crea un flujo `OTH` de 1
+    paquete que el modelo puede puntuar como ataque aunque el trafico sea normal.
+    """
+    aggregator = FlowAggregator(window_sec=2.0)
+    aggregator.add(_syn(4444, 1000.0))
+    aggregator.add(Packet("10.0.0.1", "10.0.0.2", 4444, 80, "tcp", 40, "F", 1000.2))
+    assert len(aggregator.close_window()) == 1
+
+    aggregator.add(Packet("10.0.0.2", "10.0.0.1", 80, 4444, "tcp", 0, "A", 1000.3))
+
+    assert aggregator.active_count == 0
+    assert aggregator.close_window(final=True) == []
+
+
+def test_new_syn_after_emission_starts_a_new_flow() -> None:
+    """Given un SYN nuevo con la misma tupla, Then no se descarta como resto."""
+    aggregator = FlowAggregator(window_sec=2.0)
+    aggregator.add(_syn(4444, 1000.0))
+    aggregator.add(Packet("10.0.0.1", "10.0.0.2", 4444, 80, "tcp", 40, "F", 1000.2))
+    assert len(aggregator.close_window()) == 1
+
+    aggregator.add(_syn(4444, 1001.0))
+    flows = aggregator.close_window(final=True)
+
+    assert len(flows) == 1
+    assert flows[0].flag == "S0"
+
+
 def test_final_flush_emits_flows_still_open() -> None:
     """Given flujos abiertos al terminar el stream, When flush final, Then se emiten.
 

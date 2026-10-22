@@ -19,9 +19,11 @@ from scapy.layers.l2 import ARP, Ether
 from scapy.packet import Packet as ScapyPacket
 
 from scripts.live_nids import LiveNIDS
+from src.alerts import read_alerts
 from src.dataset import synthetic_split
-from src.pipeline import build_pipeline, save_pipeline
+from src.pipeline import ModelBundle, build_pipeline, save_pipeline
 from src.replay import StreamStats, run
+from src.schema import FlowFeatures, Prediction
 
 
 @pytest.fixture
@@ -50,6 +52,7 @@ def test_live_nids_starts_with_zero_counters(artifact: None) -> None:
     assert nids.packets == 0
     assert nids.flows == 0
     assert nids.alerts == 0
+    assert nids.normals == 0
 
 
 def test_observe_counts_packets(artifact: None) -> None:
@@ -96,6 +99,80 @@ def test_model_name_and_threshold_are_exposed(artifact: None) -> None:
 
     assert nids.model_name == "random_forest"
     assert 0.0 < nids.threshold <= 1.0
+    assert nids.threshold == nids.artifact_threshold
+
+
+def test_classify_persists_attacks_and_normals(
+    artifact: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given un ataque y un flujo normal, Then ambos se persisten con su label.
+
+    Antes solo se guardaban ataques; por eso el dashboard mostraba siempre
+    "Tráfico normal = 0".
+    """
+    predictions = iter(
+        [
+            Prediction(is_attack=True, score=0.9, model_name="random_forest"),
+            Prediction(is_attack=False, score=0.01, model_name="random_forest"),
+        ]
+    )
+    def fake_predict(_bundle: ModelBundle, _flow: FlowFeatures) -> Prediction:
+        return next(predictions)
+
+    monkeypatch.setattr("scripts.live_nids.predict_flow", fake_predict)
+    nids = LiveNIDS(window=2.0, host_window=100.0)
+
+    nids.observe(_syn(1000, 1.0))
+    nids.observe(_syn(1001, 1.1))
+    nids.flush(final=True)
+
+    assert nids.alerts == 1
+    assert nids.normals == 1
+    assert [a.label for a in read_alerts()] == ["ataque", "normal"]
+
+
+def test_demo_threshold_reclassifies_benign_score(
+    artifact: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given score 0.2 y umbral de demo 0.3, Then el flujo se persiste como normal.
+
+    Es el override de `NIDS_THRESHOLD`: el artefacto (0.05) lo marcaria ataque,
+    pero la demo necesita separar el trafico benigno (~0.13-0.16) del ataque.
+    """
+    prediction = Prediction(is_attack=True, score=0.2, model_name="random_forest")
+
+    def fake_predict(_bundle: ModelBundle, _flow: FlowFeatures) -> Prediction:
+        return prediction
+
+    monkeypatch.setattr("scripts.live_nids.predict_flow", fake_predict)
+    nids = LiveNIDS(window=2.0, host_window=100.0, threshold=0.3)
+
+    nids.observe(_syn(1000, 1.0))
+    nids.flush(final=True)
+
+    assert nids.alerts == 0
+    assert nids.normals == 1
+    assert read_alerts()[-1].label == "normal"
+
+
+def test_demo_threshold_keeps_clear_attack(
+    artifact: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given score 0.7 y umbral de demo 0.3, Then el flujo sigue siendo ataque."""
+    prediction = Prediction(is_attack=True, score=0.7, model_name="random_forest")
+
+    def fake_predict(_bundle: ModelBundle, _flow: FlowFeatures) -> Prediction:
+        return prediction
+
+    monkeypatch.setattr("scripts.live_nids.predict_flow", fake_predict)
+    nids = LiveNIDS(window=2.0, host_window=100.0, threshold=0.3)
+
+    nids.observe(_syn(1000, 1.0))
+    nids.flush(final=True)
+
+    assert nids.alerts == 1
+    assert nids.normals == 0
+    assert read_alerts()[-1].label == "ataque"
 
 
 def test_live_and_replay_agree_on_the_same_packets(artifact: None) -> None:

@@ -83,7 +83,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "PLR2004", "D", "ARG", "SLF001", "INP001", "TC", "PT013", "PT022"]
-"dashboard.py" = ["D", "BLE001"]  # streamlit corre como script
+# ISC003: basedpyright (reportImplicitStringConcatenation) exige concatenacion
+# explicita; ruff prefiere la implicita. Se elige la explicita para el dashboard.
+"dashboard.py" = ["D", "BLE001", "ISC003"]  # streamlit corre como script
 "scripts/*" = ["INP001", "ANN401"]  # scapy muta paquetes in-place; Any es el tipo real
 
 # ── Tests ─────────────────────────────────────────────────────

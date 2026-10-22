@@ -17,6 +17,10 @@ from .schema import Alert, FlowFeatures, Prediction
 
 ALERTS_PATH: Final[Path] = Path("output/alertas.jsonl")
 
+# Metadata de la corrida en vivo (umbral efectivo). El dashboard la lee para
+# mostrar si el detector usa el umbral del artefacto o un override de demo.
+RUNTIME_PATH: Final[Path] = Path("output/nids_runtime.json")
+
 
 def make_alert(prediction: Prediction, flow: FlowFeatures, ts: str | None = None) -> Alert:
     """Construye el evento con timestamp UTC ISO-8601."""
