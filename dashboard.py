@@ -26,8 +26,9 @@ from src.docker_control import ATTACKS, DockerControl
 from src.pipeline import METRICS_PATH, PIPELINE_PATH
 from src.schema import Alert
 
-REFRESH_SECONDS: Final[str] = "2s"
-MAX_FEED: Final[int] = 40
+REFRESH_SECONDS: Final[str] = "1s"
+REFRESH_EVERY_S: Final[float] = 1.0
+MAX_FEED: Final[int] = 12
 MAX_TABLE: Final[int] = 500
 LOG_LINES: Final[int] = 120
 
@@ -110,7 +111,8 @@ h3 { font-size: .92rem; font-weight: 600; color: var(--dim); }
 
 /* Feed en vivo: el elemento memorable de la pagina */
 .nids-feed { border: 1px solid var(--border); border-radius: 10px;
-  background: var(--surface); overflow: hidden; }
+  background: var(--surface); overflow-x: hidden; overflow-y: auto;
+  max-height: 320px; }
 .nids-feed-row { display: flex; align-items: center; gap: .8rem;
   padding: .42rem .9rem; border-bottom: 1px solid var(--border);
   font-family: 'IBM Plex Mono', monospace; font-size: .78rem; }
@@ -119,6 +121,10 @@ h3 { font-size: .92rem; font-weight: 600; color: var(--dim); }
 .nids-feed-row .sc { flex: 0 0 auto; font-weight: 600; }
 .nids-feed-row .sc.crit { color: var(--critical); }
 .nids-feed-row .sc.ok   { color: var(--ok); }
+.nids-feed-row .vd { flex: 0 0 auto; font-size: .66rem; font-weight: 700;
+  letter-spacing: .07em; padding: .12rem .5rem; border-radius: 999px; }
+.nids-feed-row .vd.atk { color: #fff; background: var(--critical); }
+.nids-feed-row .vd.okm { color: #fff; background: var(--ok); }
 .nids-feed-row .meta { color: var(--dim); overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
 .nids-bar { flex: 0 0 70px; height: 5px; background: var(--surface-2);
@@ -277,8 +283,7 @@ def _stat_strip(alerts: list[Alert]) -> None:
             <div class="k">score maximo</div>
             <div class="v {clase_pico}">{pico:.3f}</div></div>
           <div class="nids-stat">
-            <div class="k">volumen</div>
-            <div class="v">{_human_bytes(bytes_total)}</div></div>
+            <div class="k">volumen</div><div class="v">{_human_bytes(bytes_total)}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -289,12 +294,11 @@ def _feed(alerts: list[Alert]) -> None:
     """Feed en vivo: las detecciones mas recientes con barra de score."""
     st.markdown("#### Detecciones en vivo")
     if not alerts:
-        st.markdown(
+        st.html(
             '<div class="nids-feed"><div class="nids-feed-row">'
             '<span class="meta">Sin eventos todavia. Lanza un ataque desde el panel '
             "izquierdo.</span>"
             "</div></div>",
-            unsafe_allow_html=True,
         )
         return
 
@@ -303,19 +307,21 @@ def _feed(alerts: list[Alert]) -> None:
         crit = alert.label == "ataque"
         color = _score_color(alert.score)
         pct = min(100.0, alert.score * 100)
+        veredicto = "ATAQUE" if crit else "NORMAL"
         rows.append(
-            f"""
-            <div class="nids-feed-row">
-              <span class="t">{_local_hour(alert.ts)}</span>
-              <span class="sc {'crit' if crit else 'ok'}">{alert.score:.3f}</span>
-              <span class="nids-bar"><i style="width:{pct:.0f}%;background:{color}"></i></span>
-              <span class="meta">{alert.flow.protocol_type}/{alert.flow.service}
-                &nbsp;flag={alert.flow.flag} &nbsp;pkts={alert.flow.count}
-                &nbsp;serror={alert.flow.serror_rate:.2f}</span>
-            </div>
-            """
+            '<div class="nids-feed-row">'
+            f'<span class="vd {"atk" if crit else "okm"}">{veredicto}</span>'
+            f'<span class="t">{_local_hour(alert.ts)}</span>'
+            f'<span class="sc {"crit" if crit else "ok"}">{alert.score:.3f}</span>'
+            f'<span class="nids-bar"><i style="width:{pct:.0f}%;background:{color}"></i></span>'
+            f'<span class="meta">{alert.flow.protocol_type}/{alert.flow.service}'
+            f'&nbsp;flag={alert.flow.flag} &nbsp;pkts={alert.flow.count}'
+            f'&nbsp;serror={alert.flow.serror_rate:.2f}</span>'
+            '</div>'
         )
-    st.markdown(f'<div class="nids-feed">{"".join(rows)}</div>', unsafe_allow_html=True)
+    # st.html en vez de st.markdown: el procesador Markdown convierte las lineas
+    # indentadas del template en bloques de codigo literal y se veia el HTML.
+    st.html(f'<div class="nids-feed">{"".join(rows)}</div>')
 
 
 def _charts(frame: pd.DataFrame) -> None:
@@ -539,32 +545,40 @@ st.set_page_config(
 st.markdown(CSS, unsafe_allow_html=True)
 
 control = DockerControl()
-alerts = read_alerts(ALERTS_PATH)
-frame = _alerts_frame(alerts)
 
-_topbar(control, alerts)
-_stat_strip(alerts)
 
-col_ctrl, col_feed = st.columns([1, 2])
+@st.fragment(run_every=REFRESH_EVERY_S)
+def _live(control: DockerControl) -> None:
+    """Todo lo que cambia en vivo: el fragmento se reejecuta solo cada 1 s."""
+    alerts = read_alerts(ALERTS_PATH)
+    frame = _alerts_frame(alerts)
 
-with col_ctrl:
-    _controls(control)
+    _topbar(control, alerts)
+    _stat_strip(alerts)
 
-with col_feed:
-    _feed(alerts)
+    col_ctrl, col_feed = st.columns([1, 2])
 
-_charts(frame)
+    with col_ctrl:
+        _controls(control)
 
-_tabla = st.container()
-with _tabla:
-    _table(frame)
+    with col_feed:
+        _feed(alerts)
 
-st.divider()
-col_logs, col_state = st.columns([3, 1])
-with col_logs:
-    _logs(control)
-with col_state:
-    _containers(control)
+    _charts(frame)
+
+    _tabla = st.container()
+    with _tabla:
+        _table(frame)
+
+    st.divider()
+    col_logs, col_state = st.columns([3, 1])
+    with col_logs:
+        _logs(control)
+    with col_state:
+        _containers(control)
+
+
+_live(control)
 
 st.caption(
     f"Store: {ALERTS_PATH} · el panel se refresca cada {REFRESH_SECONDS} · "

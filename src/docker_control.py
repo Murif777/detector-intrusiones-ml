@@ -65,8 +65,17 @@ class LaunchResult:
 
 
 def _image_tag(container: object) -> str:
-    """Primera etiqueta de la imagen de un contenedor, o `?`."""
-    imagen = getattr(container, "image", None)
+    """Primera etiqueta de la imagen de un contenedor, o `?`.
+
+    Defensivo a proposito: si la imagen ya no existe en el daemon (por ejemplo
+    un contenedor viejo cuya imagen se reconstruyo despues), `container.image`
+    lanza ImageNotFound al inspeccionarla. Devolver "?" en vez de romper el
+    panel, que se refresca solo.
+    """
+    try:
+        imagen = getattr(container, "image", None)
+    except DockerException:
+        return "?"
     if isinstance(imagen, dict):
         tags = imagen.get("tags") or []
         if tags:
@@ -85,7 +94,9 @@ class DockerControl:
         self._error: str = ""
         try:
             base = "unix://" + (socket_path or DOCKER_SOCKET)
-            self._client = DockerClient(base_url=base)
+            # Timeout corto a proposito: el panel se refresca cada 1 s y un
+            # daemon lento no debe congelar el ciclo (el default del SDK es 60 s).
+            self._client = DockerClient(base_url=base, timeout=10)
             self._client.ping()
         except DockerException as exc:
             self._client = None
@@ -177,6 +188,9 @@ class DockerControl:
                 name=f"nids-attacker-{attack}-{os.getpid()}",
                 network_mode=f"container:{detector.id}",
                 environment={"ATTACK": attack},
+                # hping3 y nmap -sS usan sockets crudos: sin estas capacidades
+                # fallan con "operation not permitted" y el ataque sale vacio.
+                cap_add=["NET_RAW", "NET_ADMIN"],
                 detach=True,
                 remove=True,
             )
@@ -185,7 +199,7 @@ class DockerControl:
         return LaunchResult(
             ok=True,
             attack=attack,
-            message=f"Ataque '{attack}' lanzado. MirÃ¡ los logs del detector.",
+            message=f"Ataque '{attack}' lanzado. Mirá los logs del detector.",
         )
 
     def tail_logs(self, lines: int = 120) -> list[str]:
