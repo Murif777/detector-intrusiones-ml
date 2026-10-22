@@ -77,20 +77,27 @@ Deja esta terminal visible. **Aquí van a aparecer las alertas.**
 
 **Terminal B (nueva):**
 ```powershell
-uv run streamlit run dashboard.py
+docker compose up dashboard
 ```
 
-Se abre el navegador solo. Si no, anda a `http://localhost:8501`.
+Se abre el navegador solo. Si no, andá a `http://localhost:8501`.
 
-**Lo que vas a ver:** el panel con `Modelo entrenado: si`, `Eventos: 0`,
-`Ataques: 0`. La tabla dice "Sin alertas todavía".
+**Lo que vas a ver:** la banda superior en `EN VIVO`, la tira de indicadores en
+cero, el feed vacío con *"Sin eventos todavía"*, y el **panel de control con un
+botón por cada ataque**: SYN flood, Escaneo de puertos, Inundación HTTP, Todos,
+Tráfico normal.
 
 **Lo que dices:**
-> "Esta es la visualización. Está en cero porque todavía no hay ataques."
+> "Esta es la visualización. Está en cero porque todavía no hay ataques. Y desde
+> acá mismo los puedo lanzar: no necesito tocar la terminal."
 
 ### PASO 3 — Lanza el ataque (2 min) ← **EL MOMENTO**
 
-**Terminal C (nueva):**
+Tenés dos formas. **La recomendada para impresionar:**
+
+**Desde el navegador:** hacé clic en **Todos** en el panel de control.
+
+**O desde la Terminal C (nueva):**
 ```powershell
 docker compose up attacker
 ```

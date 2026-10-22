@@ -109,7 +109,24 @@ conceden al contenedor, no al usuario. Y no necesita Npcap.
 
 Arquitectura y por qué funciona → **[docker/README.md](docker/README.md)**
 
-### B. Sin Docker — respaldo y ensayo
+### B. El panel web (centro de operaciones)
+
+El mismo `docker compose up` levanta el dashboard en **http://localhost:8501**:
+tema oscuro, feed de detecciones con barra de score, gráficos (distribución,
+línea de tiempo, flags, servicios), consola del detector en vivo y **botones
+para lanzar cada ataque desde la página**.
+
+Para verlo sin Docker:
+
+```bash
+uv run streamlit run dashboard.py    # abre en localhost:8501
+```
+
+> Desde la web se pueden lanzar ataques solo si el contenedor tiene acceso al
+> socket de Docker (ya montado en el compose). Sin socket, los botones quedan
+> deshabilitados con explicación y el resto funciona igual.
+
+### C. Sin Docker — respaldo y ensayo
 
 ```bash
 uv run python scripts/demo.py        # evaluación rigurosa + mecanismo
