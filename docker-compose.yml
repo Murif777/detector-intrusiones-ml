@@ -103,6 +103,12 @@ services:
       - ./dashboard.py:/app/dashboard.py:ro
       # RUNTIME_PATH (metadata del umbral) vive en src/alerts.py.
       - ./src/alerts.py:/app/src/alerts.py:ro
+      # Control de contenedores: permite lanzar ataques y leer logs desde la web.
+      - ./src/docker_control.py:/app/src/docker_control.py:ro
+      # Socket de Docker. Es una pieza de LABORATORIO: da al contenedor del
+      # dashboard control de contenedores del host. No lo montes en una maquina
+      # con nada que perder.
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       # El contenedor corre en UTC por defecto. Sin TZ, `astimezone()` mostraria
       # UTC y no la hora local de la demo. Se puede cambiar con DEMO_TZ.

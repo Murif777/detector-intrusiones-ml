@@ -17,12 +17,19 @@ dependencies = [
     "uvicorn>=0.30",
     "streamlit>=1.38",
     "scapy>=2.6",
-    "pytest>=8.3",
-    "httpx>=0.27",
+    # Dashboard: graficos declarativos y control de contenedores.
+    "altair>=5.4",
+    "pandas>=2.2",
+    "docker>=7.1",
 ]
 
 [project.optional-dependencies]
-dev = ["basedpyright>=1.1", "ruff>=0.6"]
+dev = [
+    "basedpyright>=1.1",
+    "ruff>=0.6",
+    "pytest>=8.3",
+    "httpx>=0.27",
+]
 
 [build-system]
 requires = ["hatchling"]
